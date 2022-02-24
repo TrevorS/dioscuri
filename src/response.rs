@@ -1,6 +1,6 @@
 use url::Url;
 
-use crate::header::{Header, StatusCode};
+use crate::header::Header;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Status {
