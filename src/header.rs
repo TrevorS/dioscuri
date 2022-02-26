@@ -105,7 +105,7 @@ impl Header {
     pub fn inner(&self) -> &Inner {
         &self.inner
     }
-    // TODO: assert on status code range to ensure validity of combo
+
     pub fn input(status: Status, prompt: &str) -> Self {
         Self {
             status,
@@ -176,9 +176,16 @@ pub fn build_header(input: &[u8]) -> (Header, Option<Vec<u8>>) {
 mod parser {
     use super::*;
 
+    use Status::*;
+
+    use nom::bytes::complete::{tag, take};
+    use nom::character::complete::{line_ending, not_line_ending};
+    use nom::combinator::map_res;
+    use nom::sequence::{separated_pair, terminated};
+    use nom::IResult;
+
     #[rustfmt::skip]
-    pub fn parse(i: &str) -> nom::IResult<&str, Header> {
-        use Status::*;
+    pub fn parse(i: &str) -> IResult<&str, Header> {
 
         let (rest, (status, meta)) = parse_gemini_header(i)?;
 
@@ -207,20 +214,19 @@ mod parser {
         ))
     }
 
-    fn parse_gemini_header(i: &str) -> nom::IResult<&str, (Status, &str)> {
-        nom::sequence::terminated(
-            nom::sequence::separated_pair(
-                nom::combinator::map_res(status_code_digits, Status::try_from),
-                nom::bytes::complete::tag(" "),
-                nom::character::complete::not_line_ending,
+    fn parse_gemini_header(i: &str) -> IResult<&str, (Status, &str)> {
+        terminated(
+            separated_pair(
+                map_res(status_code_digits, Status::try_from),
+                tag(" "),
+                not_line_ending,
             ),
-            nom::character::complete::line_ending,
+            line_ending,
         )(i)
     }
 
-    // helper parsers
-    fn status_code_digits(i: &str) -> nom::IResult<&str, u8> {
-        nom::combinator::map_res(nom::bytes::complete::take(2usize), str::parse)(i)
+    fn status_code_digits(i: &str) -> IResult<&str, u8> {
+        map_res(take(2usize), str::parse)(i)
     }
 
     #[cfg(test)]
