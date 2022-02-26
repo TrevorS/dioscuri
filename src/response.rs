@@ -2,10 +2,6 @@ use url::Url;
 
 use crate::header::{build_header, Header};
 
-#[derive(Debug, Clone, Copy)]
-pub enum Status {
-    Ok,
-}
 #[derive(Debug, Clone)]
 pub struct Response {
     header: Header,

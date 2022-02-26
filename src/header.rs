@@ -1,7 +1,7 @@
 use mime::Mime;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StatusCode {
+pub enum Status {
     // 10
     Input,
     // 11
@@ -42,22 +42,22 @@ pub enum StatusCode {
     Unknown(u8),
 }
 
-impl TryFrom<&str> for StatusCode {
+impl TryFrom<&str> for Status {
     type Error = std::num::ParseIntError;
 
-    fn try_from(status_code: &str) -> Result<Self, Self::Error> {
-        let status_code: u8 = str::parse(status_code)?;
+    fn try_from(status: &str) -> Result<Self, Self::Error> {
+        let status: u8 = str::parse(status)?;
 
-        Ok(status_code.into())
+        Ok(status.into())
     }
 }
 
-impl From<u8> for StatusCode {
-    // TODO: handle ranges between specific status codes
-    fn from(status_code: u8) -> Self {
-        use StatusCode::*;
+impl From<u8> for Status {
+    fn from(status: u8) -> Self {
+        use Status::*;
 
-        match status_code {
+        match status {
+            // specific errors
             10 => Input,
             11 => InputSensitive,
             20 => Success,
@@ -76,6 +76,16 @@ impl From<u8> for StatusCode {
             60 => ClientCertificateRequired,
             61 => CertificateNotAuthorized,
             62 => CertificateNotValid,
+
+            // error ranges
+            10..=19 => Input,
+            20..=29 => Success,
+            30..=39 => RedirectTemporary,
+            40..=49 => TemporaryFailure,
+            50..=59 => PermanentFailure,
+            60..=69 => ClientCertificateRequired,
+
+            // catch all
             unknown => Unknown(unknown),
         }
     }
@@ -83,47 +93,54 @@ impl From<u8> for StatusCode {
 
 #[derive(Debug, Clone)]
 pub struct Header {
-    status_code: StatusCode,
+    status: Status,
     inner: Inner,
 }
 
 impl Header {
+    pub fn status(&self) -> Status {
+        self.status
+    }
+
+    pub fn inner(&self) -> &Inner {
+        &self.inner
+    }
     // TODO: assert on status code range to ensure validity of combo
-    pub fn input(status_code: StatusCode, prompt: &str) -> Self {
+    pub fn input(status: Status, prompt: &str) -> Self {
         Self {
-            status_code,
+            status,
             inner: Inner::Input {
                 prompt: Self::prepare_str(prompt),
             },
         }
     }
 
-    pub fn success(status_code: StatusCode, mime: Mime) -> Self {
+    pub fn success(status: Status, mime: Mime) -> Self {
         Self {
-            status_code,
+            status,
             inner: Inner::Success { mime },
         }
     }
 
-    pub fn redirect(status_code: StatusCode, url: url::Url) -> Self {
+    pub fn redirect(status: Status, url: url::Url) -> Self {
         Self {
-            status_code,
+            status,
             inner: Inner::Redirect { url },
         }
     }
 
-    pub fn failure(status_code: StatusCode, error: &str) -> Self {
+    pub fn failure(status: Status, error: &str) -> Self {
         Self {
-            status_code,
+            status,
             inner: Inner::Failure {
                 error: Self::prepare_str(error),
             },
         }
     }
 
-    pub fn client_certificate(status_code: StatusCode, error: &str) -> Self {
+    pub fn client_certificate(status: Status, error: &str) -> Self {
         Self {
-            status_code,
+            status,
             inner: Inner::ClientCertificateRequired {
                 error: Self::prepare_str(error),
             },
@@ -161,39 +178,39 @@ mod parser {
 
     #[rustfmt::skip]
     pub fn parse(i: &str) -> nom::IResult<&str, Header> {
-        use StatusCode::*;
+        use Status::*;
 
-        let (rest, (status_code, meta)) = parse_gemini_header(i)?;
+        let (rest, (status, meta)) = parse_gemini_header(i)?;
 
         Ok((
             rest,
-            match status_code {
+            match status {
                 Input | InputSensitive => {
-                    Header::input(status_code, meta)
+                    Header::input(status, meta)
                 }
                 Success => {
-                    Header::success(status_code, meta.parse().unwrap())
+                    Header::success(status, meta.parse().unwrap())
                 }
                 RedirectTemporary | RedirectPermanent => {
-                    Header::redirect(status_code, meta.parse().unwrap())
+                    Header::redirect(status, meta.parse().unwrap())
                 }
                 TemporaryFailure | ServerUnavailable | CgiError | ProxyError | SlowDown | PermanentFailure | NotFound | Gone | ProxyRequestRefused | BadRequest => {
-                    Header::failure(status_code, meta)
+                    Header::failure(status, meta)
                 }
                 ClientCertificateRequired | CertificateNotAuthorized | CertificateNotValid => {
-                    Header::client_certificate(status_code, meta)
+                    Header::client_certificate(status, meta)
                 }
-                Unknown(status_code) => {
-                    panic!("Unknown status code: {} | meta: {}", status_code, meta)
+                Unknown(status) => {
+                    panic!("Unknown status code: {} | meta: {}", status, meta)
                 }
             },
         ))
     }
 
-    fn parse_gemini_header(i: &str) -> nom::IResult<&str, (StatusCode, &str)> {
+    fn parse_gemini_header(i: &str) -> nom::IResult<&str, (Status, &str)> {
         nom::sequence::terminated(
             nom::sequence::separated_pair(
-                nom::combinator::map_res(status_code_digits, StatusCode::try_from),
+                nom::combinator::map_res(status_code_digits, Status::try_from),
                 nom::bytes::complete::tag(" "),
                 nom::character::complete::not_line_ending,
             ),
@@ -204,14 +221,6 @@ mod parser {
     // helper parsers
     fn status_code_digits(i: &str) -> nom::IResult<&str, u8> {
         nom::combinator::map_res(nom::bytes::complete::take(2usize), str::parse)(i)
-    }
-
-    fn mime_type_str(i: &str) -> nom::IResult<&str, &str> {
-        nom::bytes::complete::take_while(valid_mime_type_char)(i)
-    }
-
-    fn valid_mime_type_char(c: char) -> bool {
-        c.is_alphanumeric() || c == '/'
     }
 
     #[cfg(test)]
@@ -227,21 +236,27 @@ mod parser {
         }
 
         #[test]
-        fn test_mime_type_str() {
-            assert_eq!(
-                mime_type_str("text/gemini\r\nbody"),
-                Ok(("\r\nbody", "text/gemini",))
-            )
-        }
-
-        #[test]
         fn test_parse_success() {
             match parse("20 text/gemini\r\n").unwrap().1 {
                 Header {
-                    status_code,
+                    status,
                     inner: Inner::Success { mime },
                 } => {
-                    assert_eq!(status_code, StatusCode::Success);
+                    assert_eq!(status, Status::Success);
+                    assert_eq!(mime.essence_str(), "text/gemini");
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        #[test]
+        fn test_parse_success_range() {
+            match parse("25 text/gemini\r\n").unwrap().1 {
+                Header {
+                    status,
+                    inner: Inner::Success { mime },
+                } => {
+                    assert_eq!(status, Status::Success);
                     assert_eq!(mime.essence_str(), "text/gemini");
                 }
                 _ => unreachable!(),
@@ -252,10 +267,10 @@ mod parser {
         fn test_parse_input() {
             match parse("10 What is your name?\r\n").unwrap().1 {
                 Header {
-                    status_code,
+                    status,
                     inner: Inner::Input { prompt },
                 } => {
-                    assert_eq!(status_code, StatusCode::Input);
+                    assert_eq!(status, Status::Input);
                     assert_eq!(prompt, Some("What is your name?".to_string()));
                 }
                 _ => unreachable!(),
@@ -266,10 +281,10 @@ mod parser {
         fn test_parse_input_sensitive() {
             match parse("11 Would you like to play a game?\r\n").unwrap().1 {
                 Header {
-                    status_code,
+                    status,
                     inner: Inner::Input { prompt },
                 } => {
-                    assert_eq!(status_code, StatusCode::InputSensitive);
+                    assert_eq!(status, Status::InputSensitive);
                     assert_eq!(prompt, Some("Would you like to play a game?".to_string()));
                 }
                 _ => unreachable!(),

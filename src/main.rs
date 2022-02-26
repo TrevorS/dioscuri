@@ -8,10 +8,13 @@ fn main() -> anyhow::Result<()> {
     let url = url::Url::parse("gemini://geminiquickst.art/").unwrap();
 
     let rsp = client.get(&url)?;
-    dbg!(&rsp.header());
 
     let body = std::str::from_utf8(rsp.body().unwrap())?;
     dbg!(&body);
+
+    dbg!(&rsp.header().status());
+    dbg!(&rsp.header().inner());
+    dbg!(&rsp.url());
 
     Ok(())
 }
