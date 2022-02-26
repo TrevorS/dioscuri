@@ -1,6 +1,6 @@
 use url::Url;
 
-use crate::header::Header;
+use crate::header::{build_header, Header};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Status {
@@ -14,12 +14,14 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn parse(data: &[u8], url: &Url) -> Self {
-        Self {
-            header: Header::from(20, "text/gemini"),
-            body: Some(data.to_vec()),
+    pub fn parse(data: &[u8], url: &Url) -> anyhow::Result<Self> {
+        let (header, body) = build_header(data);
+
+        Ok(Self {
+            header,
+            body,
             url: url.to_owned(),
-        }
+        })
     }
 
     pub fn body(&self) -> Option<&Vec<u8>> {
