@@ -1,8 +1,10 @@
-use std::{io::Read, io::Write, net::ToSocketAddrs};
+use std::{io::Read, io::Write};
 
 use url::Url;
 
 use crate::response::Response;
+use crate::tls::tofu::verify;
+use crate::tls::{build_connector, get_stream};
 
 pub struct GeminiClient {
     connector: native_tls::TlsConnector,
@@ -11,24 +13,17 @@ pub struct GeminiClient {
 impl GeminiClient {
     pub fn new() -> Self {
         Self {
-            connector: native_tls::TlsConnector::builder()
-                .disable_built_in_roots(true)
-                .danger_accept_invalid_certs(true)
-                .build()
-                .expect("Failed to create valid TlsConnector"),
+            connector: build_connector(),
         }
     }
 
     pub fn get(&self, url: &Url) -> anyhow::Result<Response> {
-        let host = url.host_str().unwrap();
-        let port = url.port().unwrap_or(1965);
+        let mut stream = get_stream(&self.connector, &url)?;
 
-        let addr = (host, port).to_socket_addrs()?.next().unwrap();
+        let certificate = stream.peer_certificate()?;
 
-        let stream = std::net::TcpStream::connect(&addr)?;
-        let mut stream = self.connector.connect(host, stream)?;
-
-        let _certificate = stream.peer_certificate()?.unwrap();
+        let certificate_status = verify(certificate.as_ref(), url)?;
+        dbg!(&certificate_status);
 
         stream
             .write_all(format!("{}\r\n", url.as_str()).as_bytes())
