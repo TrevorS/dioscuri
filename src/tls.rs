@@ -5,12 +5,12 @@ use url::Url;
 
 const DEFAULT_GEMINI_PORT: u16 = 1965;
 
-pub fn build_connector() -> TlsConnector {
+pub fn build_connector() -> anyhow::Result<TlsConnector> {
     native_tls::TlsConnector::builder()
         .disable_built_in_roots(true)
         .danger_accept_invalid_certs(true)
         .build()
-        .expect("Failed to create valid TlsConnector")
+        .map_err(|_| anyhow::anyhow!("failed to build connector"))
 }
 
 pub fn get_stream(connector: &TlsConnector, url: &Url) -> anyhow::Result<TlsStream<TcpStream>> {

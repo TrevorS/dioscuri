@@ -11,10 +11,10 @@ pub struct GeminiClient {
 }
 
 impl GeminiClient {
-    pub fn new() -> Self {
-        Self {
-            connector: build_connector(),
-        }
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            connector: build_connector()?,
+        })
     }
 
     pub fn get(&self, url: &Url) -> anyhow::Result<Response> {

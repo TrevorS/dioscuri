@@ -13,3 +13,4 @@ nom = "7.1.0"
 anyhow = "1.0.55"
 webpki = { version = "0.22.0", features = ["std"] }
 x509-parser = "0.13.0"
+rusqlite = { version = "0.27.0", features = ["bundled", "time"] }
