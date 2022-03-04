@@ -21,7 +21,7 @@ impl GeminiClient {
     }
 
     pub fn get(&self, url: &Url) -> anyhow::Result<Response> {
-        let mut stream = get_stream(&self.connector, &url)?;
+        let mut stream = get_stream(&self.connector, url)?;
 
         let certificate = stream.peer_certificate()?;
 

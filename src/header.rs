@@ -56,6 +56,7 @@ impl From<u8> for Status {
     fn from(status: u8) -> Self {
         use Status::*;
 
+        #[allow(clippy::match_overlapping_arm)]
         match status {
             // specific errors
             10 => Input,

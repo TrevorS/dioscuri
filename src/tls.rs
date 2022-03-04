@@ -15,7 +15,7 @@ pub fn build_connector() -> anyhow::Result<TlsConnector> {
 }
 
 pub fn get_stream(connector: &TlsConnector, url: &Url) -> anyhow::Result<TlsStream<TcpStream>> {
-    let (host, addr) = url_to_socket_addrs(&url)?;
+    let (host, addr) = url_to_socket_addrs(url)?;
     let stream = TcpStream::connect(&addr)?;
 
     connector
