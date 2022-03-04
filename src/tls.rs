@@ -1,16 +1,17 @@
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 
+use anyhow::anyhow;
 use native_tls::{TlsConnector, TlsStream};
 use url::Url;
 
 const DEFAULT_GEMINI_PORT: u16 = 1965;
 
 pub fn build_connector() -> anyhow::Result<TlsConnector> {
-    native_tls::TlsConnector::builder()
+    TlsConnector::builder()
         .disable_built_in_roots(true)
         .danger_accept_invalid_certs(true)
         .build()
-        .map_err(|_| anyhow::anyhow!("failed to build connector"))
+        .map_err(|_| anyhow!("failed to build connector"))
 }
 
 pub fn get_stream(connector: &TlsConnector, url: &Url) -> anyhow::Result<TlsStream<TcpStream>> {
@@ -19,45 +20,85 @@ pub fn get_stream(connector: &TlsConnector, url: &Url) -> anyhow::Result<TlsStre
 
     connector
         .connect(host, stream)
-        .map_err(|_| anyhow::anyhow!("failed to connect to addr: {}", addr))
+        .map_err(|_| anyhow!("failed to connect to addr: {}", addr))
 }
 
 fn url_to_socket_addrs(url: &Url) -> anyhow::Result<(&str, SocketAddr)> {
     let host = url
         .host_str()
-        .ok_or_else(|| anyhow::anyhow!("could not extract host from url"))?;
+        .ok_or_else(|| anyhow!("could not extract host from url"))?;
 
     let port = url.port().unwrap_or(DEFAULT_GEMINI_PORT);
 
     let addrs = (host, port)
         .to_socket_addrs()?
         .next()
-        .ok_or_else(|| anyhow::anyhow!("failed to create SocketAddr"))?;
+        .ok_or_else(|| anyhow!("failed to create SocketAddr"))?;
 
     Ok((host, addrs))
 }
 
-pub mod tofu {
+pub mod verification {
+    use anyhow::anyhow;
     use native_tls::Certificate;
+    use sha2::Digest;
     use url::Url;
 
-    #[derive(Debug, Clone, Copy)]
+    use crate::db::Db;
+
+    #[derive(Debug, Clone, PartialEq)]
     pub enum State {
-        NewCertificate,
+        New,
         Matched,
         Conflict,
     }
 
-    pub fn verify(certificate: Option<&Certificate>, url: &Url) -> anyhow::Result<State> {
-        anyhow::ensure!(certificate.is_some(), "failed to receive peer certificate");
+    pub trait Verifier {
+        fn verify(&self, certificate: Option<&Certificate>, url: &Url) -> anyhow::Result<State>;
+    }
 
-        let certificate = certificate.unwrap();
-        let dns_name = dns_name_from_url(url)?;
+    pub struct TofuVerifier {
+        db: Db,
+    }
 
-        verify_dns_name(certificate, &dns_name)?;
-        check_validity(certificate)?;
+    impl TofuVerifier {
+        pub fn new(db: Db) -> Self {
+            Self { db }
+        }
+    }
 
-        Ok(State::NewCertificate)
+    impl Verifier for TofuVerifier {
+        fn verify(&self, certificate: Option<&Certificate>, url: &Url) -> anyhow::Result<State> {
+            anyhow::ensure!(certificate.is_some(), "failed to receive peer certificate");
+
+            let certificate = certificate.unwrap();
+            let dns_name = dns_name_from_url(url)?;
+
+            verify_dns_name(certificate, &dns_name)?;
+            check_validity(certificate)?;
+
+            let hostname = url
+                .host_str()
+                .ok_or_else(|| anyhow!("failed to extract host from url"))?;
+
+            let fingerprint = create_fingerprint(certificate)?;
+
+            match self.db.get_certificate(hostname)? {
+                Some(existing) => {
+                    if fingerprint == existing.fingerprint {
+                        self.db
+                            .update_certificate_timestamp(hostname)
+                            .map(|_| Ok(State::Matched))?
+                    } else {
+                        Ok(State::Conflict)
+                    }
+                }
+                None => self
+                    .db
+                    .insert_certificate(hostname, &fingerprint)
+                    .map(|_| State::New),
+            }
+        }
     }
 
     fn verify_dns_name(
@@ -69,7 +110,7 @@ pub mod tofu {
 
         certificate
             .verify_is_valid_for_dns_name(*dns_name)
-            .map_err(|_| anyhow::anyhow!("failed to validate certificate via dns name"))
+            .map_err(|_| anyhow!("failed to validate certificate via dns name"))
     }
 
     fn check_validity(certificate: &Certificate) -> anyhow::Result<()> {
@@ -81,14 +122,20 @@ pub mod tofu {
             .validity()
             .is_valid()
             .then(|| {})
-            .ok_or_else(|| anyhow::anyhow!("failed to validate certificate via time"))
+            .ok_or_else(|| anyhow!("failed to validate certificate using time range validity"))
     }
 
     fn dns_name_from_url(url: &Url) -> anyhow::Result<webpki::DnsNameRef> {
         webpki::DnsNameRef::try_from_ascii_str(
             url.host_str()
-                .ok_or_else(|| anyhow::anyhow!("failed to convert url to ascii string"))?,
+                .ok_or_else(|| anyhow!("failed to convert url to ascii string"))?,
         )
-        .map_err(|_| anyhow::anyhow!("failed to convert ascii string to dns name"))
+        .map_err(|_| anyhow!("failed to convert ascii string to dns name"))
+    }
+
+    fn create_fingerprint(certificate: &Certificate) -> anyhow::Result<String> {
+        let raw = certificate.to_der()?;
+
+        Ok(base16ct::lower::encode_string(&sha2::Sha256::digest(raw)))
     }
 }

@@ -1,19 +1,22 @@
+use std::rc::Rc;
 use std::{io::Read, io::Write};
 
 use url::Url;
 
 use crate::response::Response;
-use crate::tls::tofu::verify;
+use crate::tls::verification::{State, Verifier};
 use crate::tls::{build_connector, get_stream};
 
 pub struct GeminiClient {
     connector: native_tls::TlsConnector,
+    verifier: Rc<dyn Verifier>,
 }
 
 impl GeminiClient {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(verifier: Rc<dyn Verifier>) -> anyhow::Result<Self> {
         Ok(Self {
             connector: build_connector()?,
+            verifier,
         })
     }
 
@@ -22,12 +25,16 @@ impl GeminiClient {
 
         let certificate = stream.peer_certificate()?;
 
-        let certificate_status = verify(certificate.as_ref(), url)?;
+        let certificate_status = self.verifier.verify(certificate.as_ref(), url)?;
         dbg!(&certificate_status);
 
-        stream
-            .write_all(format!("{}\r\n", url.as_str()).as_bytes())
-            .unwrap();
+        anyhow::ensure!(
+            State::Conflict != certificate_status,
+            "certificate conflict"
+        );
+
+        stream.write_all(format!("{}\r\n", url.as_str()).as_bytes())?;
+        stream.flush()?;
 
         let mut buf = vec![];
         stream.read_to_end(&mut buf)?;
