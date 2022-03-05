@@ -23,9 +23,10 @@ fn main() -> anyhow::Result<()> {
     let url = Url::parse("gemini://geminiquickst.art/").unwrap();
     let rsp = client.get(&url)?;
 
-    let _body = std::str::from_utf8(rsp.body().unwrap())?;
-    // dbg!(&body);
+    let body = rsp.body().unwrap();
+    let document = gemini::build_document(body);
 
+    dbg!(&document.lines());
     dbg!(&rsp.header().status());
     dbg!(&rsp.header().inner());
     dbg!(&rsp.url());
