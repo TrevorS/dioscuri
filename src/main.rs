@@ -24,7 +24,7 @@ fn main() -> anyhow::Result<()> {
     let rsp = client.get(&url)?;
 
     let body = rsp.body().unwrap();
-    let document = gemini::build_document(body);
+    let document = gemini::build_document(body, &url);
 
     dbg!(&document.lines());
     dbg!(&rsp.header().status());

@@ -15,10 +15,10 @@ impl Document {
     }
 }
 
-pub fn build_document(input: &[u8]) -> Document {
+pub fn build_document(input: &[u8], url: &Url) -> Document {
     let lines = std::str::from_utf8(input).unwrap();
 
-    let (_, document) = parser::parse(lines).unwrap();
+    let (_, document) = parser::parse(lines, url).unwrap();
 
     document
 }
@@ -93,85 +93,94 @@ mod parser {
     use nom::sequence::{pair, preceded, terminated};
     use nom::IResult;
 
-    pub fn parse(i: &str) -> IResult<&str, Document> {
+    pub fn parse<'a>(i: &'a str, url: &'a Url) -> IResult<&'a str, Document> {
         let mut preformatted = false;
 
-        let (i, lines) = many0(map(
-            terminated(line, line_ending),
-            |line: Line| match line {
-                Line::PreformatToggle { alt_text: _ } => {
-                    preformatted = !preformatted;
+        let (i, document) = map(
+            many0(map(
+                terminated(line(url), line_ending),
+                |line: Line| match line {
+                    Line::PreformatToggle { alt_text: _ } => {
+                        preformatted = !preformatted;
 
-                    line
-                }
-                Line::Text { ref content } => {
-                    if preformatted {
-                        // stop making two lines :(
-                        Line::preformatted_text(content)
-                    } else {
                         line
                     }
-                }
-                _ => line,
-            },
-        ))(i)?;
+                    Line::Text { ref content } => {
+                        if preformatted {
+                            // stop making two lines :(
+                            Line::preformatted_text(content)
+                        } else {
+                            line
+                        }
+                    }
+                    _ => line,
+                },
+            )),
+            Document::new,
+        )(i)?;
 
-        Ok((i, Document::new(lines)))
+        Ok((i, document))
     }
 
-    fn line(i: &str) -> IResult<&str, Line> {
+    fn line<'a>(url: &'a Url) -> impl FnMut(&'a str) -> IResult<&'a str, Line> {
         alt((
-            link,
+            link(url),
             preformat_toggle,
             heading,
             unordered_list_item,
             quote,
             text,
-        ))(i)
+        ))
     }
 
     fn text(i: &str) -> IResult<&str, Line> {
-        let (i, content) = not_line_ending(i)?;
-
-        Ok((i, Line::text(content)))
+        map(not_line_ending, Line::text)(i)
     }
 
-    fn link(i: &str) -> IResult<&str, Line> {
-        let (i, _) = terminated(tag("=>"), multispace0)(i)?;
-        let (i, url) = take_while(is_valid_link_char)(i)?;
-        let (i, name) = map(not_line_ending, str_clean_up)(i)?;
+    fn link<'a>(base_url: &'a Url) -> impl FnMut(&'a str) -> IResult<&'a str, Line> {
+        map(
+            preceded(
+                terminated(tag("=>"), multispace0),
+                pair(
+                    take_while(is_valid_link_char),
+                    map(not_line_ending, str_clean_up),
+                ),
+            ),
+            |(url, name)| {
+                // TODO: need to propagate errors properly
+                let url = base_url.join(url).unwrap();
 
-        // TODO: convert errors and handle relative urls
-        let url = Url::parse(url).unwrap_or(
-            Url::parse("gemini://example.org/this-is-a-garbage-relative-url-hack").unwrap(),
-        );
-
-        Ok((i, Line::link(url, name)))
+                Line::link(url, name)
+            },
+        )
     }
 
     fn preformat_toggle(i: &str) -> IResult<&str, Line> {
-        let (i, (_, alt_text)) = pair(tag("```"), map(not_line_ending, str_clean_up))(i)?;
-
-        Ok((i, Line::preformat_toggle(alt_text)))
+        map(
+            preceded(tag("```"), map(not_line_ending, str_clean_up)),
+            Line::preformat_toggle,
+        )(i)
     }
 
     fn heading(i: &str) -> IResult<&str, Line> {
-        let (i, (level, content)) =
-            pair(many1_count(tag("#")), map(not_line_ending, str::trim))(i)?;
-
-        Ok((i, Line::heading(content, level)))
+        map(
+            pair(many1_count(tag("#")), map(not_line_ending, str::trim)),
+            |(level, content)| Line::heading(content, level),
+        )(i)
     }
 
     fn unordered_list_item(i: &str) -> IResult<&str, Line> {
-        let (i, content) = preceded(tag("*"), map(not_line_ending, str::trim))(i)?;
-
-        Ok((i, Line::unordered_list_item(content)))
+        map(
+            preceded(tag("*"), map(not_line_ending, str::trim)),
+            Line::unordered_list_item,
+        )(i)
     }
 
     fn quote(i: &str) -> IResult<&str, Line> {
-        let (i, content) = preceded(tag(">"), map(not_line_ending, str::trim))(i)?;
-
-        Ok((i, Line::quote(content)))
+        map(
+            preceded(tag(">"), map(not_line_ending, str::trim)),
+            Line::quote,
+        )(i)
     }
 
     // TODO: improve this
@@ -192,11 +201,23 @@ mod parser {
     mod test {
         use super::*;
 
+        fn example_dot_org() -> Url {
+            Url::parse("gemini://example.org").unwrap()
+        }
+
+        fn parse_with_example_url(body: &str) -> Document {
+            parse(body, &example_dot_org()).unwrap().1
+        }
+
+        fn line_with_example_url(line_str: &str) -> Line {
+            line(&example_dot_org())(line_str).unwrap().1
+        }
+
         #[test]
         fn test_parse_preformatted_text() {
-            let (_, actual) =
-                parse("Hello Text!\r\n``` python\r\nprint('hello')\r\n```\r\nHello Text!\r\n")
-                    .unwrap();
+            let actual = parse_with_example_url(
+                "Hello Text!\r\n``` python\r\nprint('hello')\r\n```\r\nHello Text!\r\n",
+            );
 
             let expected = Document::new(vec![
                 Line::text("Hello Text!"),
@@ -211,17 +232,14 @@ mod parser {
 
         #[test]
         fn test_parse_text_quote_link() {
-            let (_, actual) =
-                parse("Hello Text!\r\n> Hello Quote!\r\n=> gemini://example.org Example Link!\r\n")
-                    .unwrap();
+            let actual = parse_with_example_url(
+                "Hello Text!\r\n> Hello Quote!\r\n=> gemini://example.org Example Link!\r\n",
+            );
 
             let expected = Document::new(vec![
                 Line::text("Hello Text!"),
                 Line::quote("Hello Quote!"),
-                Line::link(
-                    Url::parse("gemini://example.org").unwrap(),
-                    Some("Example Link!"),
-                ),
+                Line::link(example_dot_org(), Some("Example Link!")),
             ]);
 
             assert_eq!(expected, actual);
@@ -229,16 +247,18 @@ mod parser {
 
         #[test]
         fn test_line_text() {
-            let (_, actual) = line("Hello line!").unwrap();
-
-            assert_eq!(Line::text("Hello line!"), actual);
+            assert_eq!(
+                Line::text("Hello line!"),
+                line_with_example_url("Hello line!")
+            )
         }
 
         #[test]
         fn test_line_quote() {
-            let (_, actual) = line("> Hello quote!").unwrap();
-
-            assert_eq!(Line::quote("Hello quote!"), actual);
+            assert_eq!(
+                Line::quote("Hello quote!"),
+                line_with_example_url("> Hello quote!"),
+            );
         }
 
         #[test]
@@ -250,7 +270,9 @@ mod parser {
 
         #[test]
         fn test_link() {
-            let (_, actual) = link("=> gemini://example.org").unwrap();
+            let (_, actual) =
+                link(&Url::parse("gemini://example.org").unwrap())("=> gemini://example.org")
+                    .unwrap();
 
             assert_eq!(
                 Line::link("gemini://example.org".parse().unwrap(), None),
@@ -259,12 +281,14 @@ mod parser {
         }
 
         #[test]
-        fn test_link_with_name() {
-            let (_, actual) = link("=> gemini://example.org Example Link").unwrap();
+        fn test_link_relative() {
+            let (_, actual) =
+                link(&Url::parse("gemini://example.org").unwrap())("=> /file.gmi Example Link")
+                    .unwrap();
 
             assert_eq!(
                 Line::link(
-                    "gemini://example.org".parse().unwrap(),
+                    "gemini://example.org/file.gmi".parse().unwrap(),
                     Some("Example Link")
                 ),
                 actual
