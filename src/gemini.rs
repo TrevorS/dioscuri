@@ -88,7 +88,7 @@ mod parser {
     use nom::branch::alt;
     use nom::bytes::complete::{tag, take_while};
     use nom::character::complete::{line_ending, multispace0, not_line_ending};
-    use nom::combinator::map;
+    use nom::combinator::{all_consuming, map};
     use nom::multi::{many0, many1_count};
     use nom::sequence::{pair, preceded, terminated};
     use nom::IResult;
@@ -96,7 +96,7 @@ mod parser {
     pub fn parse<'a>(i: &'a str, url: &'a Url) -> IResult<&'a str, Document> {
         let mut preformatted = false;
 
-        let (i, document) = map(
+        let (i, document) = all_consuming(map(
             many0(map(
                 terminated(line(url), line_ending),
                 |line: Line| match line {
@@ -108,6 +108,8 @@ mod parser {
                     Line::Text { ref content } => {
                         if preformatted {
                             // stop making two lines :(
+                            // use a parser to make this work right
+                            // maybe add attributes to regular text
                             Line::preformatted_text(content)
                         } else {
                             line
@@ -117,7 +119,7 @@ mod parser {
                 },
             )),
             Document::new,
-        )(i)?;
+        ))(i)?;
 
         Ok((i, document))
     }
