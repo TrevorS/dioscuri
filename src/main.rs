@@ -20,11 +20,11 @@ fn main() -> anyhow::Result<()> {
     let verifier = Rc::new(TofuVerifier::new(db));
     let client = GeminiClient::new(verifier)?;
 
-    let url = Url::parse("gemini://geminiquickst.art/").unwrap();
+    let url = Url::parse("gemini://geminiquickst.art/")?;
     let rsp = client.get(&url)?;
 
-    let body = rsp.body().unwrap();
-    let document = gemini::build_document(body, &url);
+    let body = rsp.body().expect("No gemini body!");
+    let document = gemini::build_document(body, &url)?;
 
     dbg!(&document.lines());
     dbg!(&rsp.header().status());

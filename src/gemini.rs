@@ -15,12 +15,10 @@ impl Document {
     }
 }
 
-pub fn build_document(input: &[u8], url: &Url) -> Document {
-    let lines = std::str::from_utf8(input).unwrap();
-
-    let (_, document) = parser::parse(lines, url).unwrap();
-
-    document
+pub fn build_document(input: &[u8], url: &Url) -> anyhow::Result<Document> {
+    parser::parse(std::str::from_utf8(input)?, url)
+        .map(|(_, d)| d)
+        .map_err(|_| anyhow::anyhow!("failed to parse gemini document"))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +68,8 @@ impl Line {
     }
 
     pub fn heading(content: &str, level: usize) -> Self {
+        // maybe we log here and clamp between 1 and 3
+        // to avoid possible error
         assert!(level > 0 && level <= 3);
 
         Self::Heading {
@@ -125,7 +125,7 @@ mod parser {
     }
 
     fn link<'a>(base_url: &'a Url) -> impl FnMut(&'a str) -> IResult<&'a str, Line> {
-        map(
+        map_res::<_, _, _, _, nom::Err<url::ParseError>, _, _>(
             preceded(
                 terminated(tag("=>"), multispace0),
                 pair(
@@ -134,10 +134,10 @@ mod parser {
                 ),
             ),
             |(url, name)| {
-                // TODO: need to propagate errors properly
-                let url = base_url.join(url).unwrap();
-
-                Line::link(url, name)
+                base_url
+                    .join(url)
+                    .map(|url| Line::link(url, name))
+                    .map_err(nom::Err::Error)
             },
         )
     }
