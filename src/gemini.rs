@@ -102,6 +102,12 @@ mod parser {
     use nom::sequence::{delimited, pair, preceded, terminated};
     use nom::IResult;
 
+    const LINK_ARROW: &str = "=>";
+    const LIST_STAR: &str = "*";
+    const QUOTE_ARROW: &str = ">";
+    const HEADER_OCTOTHORPE: &str = "#";
+    const PREFORMAT_PREFIX: &str = "```";
+
     pub fn parse<'a>(i: &'a str, base_url: &'a Url) -> IResult<&'a str, Document> {
         map(
             all_consuming(many0(terminated(line(base_url), line_ending))),
@@ -114,8 +120,8 @@ mod parser {
             link(base_url),
             preformatted,
             heading,
-            unordered_list_item,
-            quote,
+            simple_line(LIST_STAR, &Line::unordered_list_item),
+            simple_line(QUOTE_ARROW, &Line::quote),
             text,
         ))
     }
@@ -127,7 +133,7 @@ mod parser {
     fn link<'a>(base_url: &'a Url) -> impl FnMut(&'a str) -> IResult<&'a str, Line> {
         map_res::<_, _, _, _, nom::Err<url::ParseError>, _, _>(
             preceded(
-                terminated(tag("=>"), multispace0),
+                terminated(tag(LINK_ARROW), multispace0),
                 pair(
                     take_while(is_valid_link_char),
                     map(not_line_ending, str_clean_up),
@@ -151,7 +157,7 @@ mod parser {
 
     fn preformat_header(i: &str) -> IResult<&str, Option<&str>> {
         map(
-            delimited(tag("```"), opt(not_line_ending), line_ending),
+            delimited(tag(PREFORMAT_PREFIX), opt(not_line_ending), line_ending),
             |alt_text| alt_text.map(str::trim),
         )(i)
     }
@@ -159,8 +165,11 @@ mod parser {
     fn preformat_body(i: &str) -> IResult<&str, Vec<Line>> {
         map(
             terminated(
-                map_res(take_until("```"), many0(terminated(text, line_ending))),
-                tag("```"),
+                map_res(
+                    take_until(PREFORMAT_PREFIX),
+                    many0(terminated(text, line_ending)),
+                ),
+                tag(PREFORMAT_PREFIX),
             ),
             |(_, lines)| lines,
         )(i)
@@ -168,23 +177,22 @@ mod parser {
 
     fn heading(i: &str) -> IResult<&str, Line> {
         map(
-            pair(many1_count(tag("#")), map(not_line_ending, str::trim)),
+            pair(
+                many1_count(tag(HEADER_OCTOTHORPE)),
+                map(not_line_ending, str::trim),
+            ),
             |(level, content)| Line::heading(content, level),
         )(i)
     }
 
-    fn unordered_list_item(i: &str) -> IResult<&str, Line> {
+    fn simple_line<'a>(
+        prefix: &'a str,
+        constructor: &'a dyn Fn(&str) -> Line,
+    ) -> impl FnMut(&'a str) -> IResult<&str, Line> {
         map(
-            preceded(tag("*"), map(not_line_ending, str::trim)),
-            Line::unordered_list_item,
-        )(i)
-    }
-
-    fn quote(i: &str) -> IResult<&str, Line> {
-        map(
-            preceded(tag(">"), map(not_line_ending, str::trim)),
-            Line::quote,
-        )(i)
+            preceded(tag(prefix), map(not_line_ending, str::trim)),
+            constructor,
+        )
     }
 
     // TODO: improve this
@@ -318,8 +326,10 @@ mod parser {
         }
 
         #[test]
-        fn test_unordered_list_item() {
-            let (_, actual) = unordered_list_item("* Example Unordered List Item").unwrap();
+        fn test_simple_line_unordered_list_item() {
+            let (_, actual) =
+                simple_line("*", &Line::unordered_list_item)("* Example Unordered List Item")
+                    .unwrap();
 
             assert_eq!(
                 Line::unordered_list_item("Example Unordered List Item"),
@@ -328,8 +338,8 @@ mod parser {
         }
 
         #[test]
-        fn test_quote() {
-            let (_, actual) = quote("> Example Quote").unwrap();
+        fn test_simple_line_quote() {
+            let (_, actual) = simple_line(">", &Line::quote)("> Example Quote").unwrap();
 
             assert_eq!(Line::quote("Example Quote"), actual);
         }
