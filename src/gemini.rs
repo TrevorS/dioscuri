@@ -97,7 +97,7 @@ mod parser {
     use nom::branch::alt;
     use nom::bytes::complete::{tag, take_until, take_while};
     use nom::character::complete::{line_ending, multispace0, not_line_ending};
-    use nom::combinator::{all_consuming, map, opt};
+    use nom::combinator::{all_consuming, map, map_res, opt};
     use nom::multi::{many0, many1_count};
     use nom::sequence::{delimited, pair, preceded, terminated};
     use nom::IResult;
@@ -143,10 +143,10 @@ mod parser {
     }
 
     fn preformatted(i: &str) -> IResult<&str, Line> {
-        let (i, alt_text) = preformat_header(i)?;
-        let (i, lines) = preformat_body(i)?;
-
-        Ok((i, Line::preformatted(alt_text, lines)))
+        map(
+            pair(preformat_header, preformat_body),
+            |(alt_text, lines)| Line::preformatted(alt_text, lines),
+        )(i)
     }
 
     fn preformat_header(i: &str) -> IResult<&str, Option<&str>> {
@@ -157,12 +157,13 @@ mod parser {
     }
 
     fn preformat_body(i: &str) -> IResult<&str, Vec<Line>> {
-        let (i, lines) = take_until("```")(i)?;
-        let (_, lines) = many0(terminated(text, line_ending))(lines)?;
-
-        let (i, _) = tag("```")(i)?;
-
-        Ok((i, lines))
+        map(
+            terminated(
+                map_res(take_until("```"), many0(terminated(text, line_ending))),
+                tag("```"),
+            ),
+            |(_, lines)| lines,
+        )(i)
     }
 
     fn heading(i: &str) -> IResult<&str, Line> {
