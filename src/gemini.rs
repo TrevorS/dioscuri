@@ -25,13 +25,27 @@ pub fn build_document(input: &[u8], url: &Url) -> Document {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Line {
-    Text { content: String },
-    Link { url: Url, link_name: Option<String> },
-    PreformatToggle { alt_text: Option<String> },
-    PreformattedText { content: String },
-    Heading { content: String, level: u8 },
-    UnorderedListItem { content: String },
-    Quote { content: String },
+    Text {
+        content: String,
+    },
+    Link {
+        url: Url,
+        link_name: Option<String>,
+    },
+    Preformatted {
+        alt_text: Option<String>,
+        lines: Vec<Line>,
+    },
+    Heading {
+        content: String,
+        level: u8,
+    },
+    UnorderedListItem {
+        content: String,
+    },
+    Quote {
+        content: String,
+    },
 }
 
 impl Line {
@@ -48,15 +62,10 @@ impl Line {
         }
     }
 
-    pub fn preformat_toggle(alt_text: Option<&str>) -> Self {
-        Self::PreformatToggle {
+    pub fn preformatted(alt_text: Option<&str>, lines: Vec<Line>) -> Self {
+        Self::Preformatted {
             alt_text: alt_text.map(str::to_string),
-        }
-    }
-
-    pub fn preformatted_text(content: &str) -> Self {
-        Self::PreformattedText {
-            content: content.to_string(),
+            lines,
         }
     }
 
@@ -86,48 +95,24 @@ mod parser {
     use super::*;
 
     use nom::branch::alt;
-    use nom::bytes::complete::{tag, take_while};
+    use nom::bytes::complete::{tag, take_until, take_while};
     use nom::character::complete::{line_ending, multispace0, not_line_ending};
-    use nom::combinator::{all_consuming, map};
+    use nom::combinator::{all_consuming, map, opt};
     use nom::multi::{many0, many1_count};
-    use nom::sequence::{pair, preceded, terminated};
+    use nom::sequence::{delimited, pair, preceded, terminated};
     use nom::IResult;
 
-    pub fn parse<'a>(i: &'a str, url: &'a Url) -> IResult<&'a str, Document> {
-        let mut preformatted = false;
-
-        let (i, document) = all_consuming(map(
-            many0(map(
-                terminated(line(url), line_ending),
-                |line: Line| match line {
-                    Line::PreformatToggle { alt_text: _ } => {
-                        preformatted = !preformatted;
-
-                        line
-                    }
-                    Line::Text { ref content } => {
-                        if preformatted {
-                            // stop making two lines :(
-                            // use a parser to make this work right
-                            // maybe add attributes to regular text
-                            Line::preformatted_text(content)
-                        } else {
-                            line
-                        }
-                    }
-                    _ => line,
-                },
-            )),
+    pub fn parse<'a>(i: &'a str, base_url: &'a Url) -> IResult<&'a str, Document> {
+        map(
+            all_consuming(many0(terminated(line(base_url), line_ending))),
             Document::new,
-        ))(i)?;
-
-        Ok((i, document))
+        )(i)
     }
 
-    fn line<'a>(url: &'a Url) -> impl FnMut(&'a str) -> IResult<&'a str, Line> {
+    fn line<'a>(base_url: &'a Url) -> impl FnMut(&'a str) -> IResult<&'a str, Line> {
         alt((
-            link(url),
-            preformat_toggle,
+            link(base_url),
+            preformatted,
             heading,
             unordered_list_item,
             quote,
@@ -157,11 +142,27 @@ mod parser {
         )
     }
 
-    fn preformat_toggle(i: &str) -> IResult<&str, Line> {
+    fn preformatted(i: &str) -> IResult<&str, Line> {
+        let (i, alt_text) = preformat_header(i)?;
+        let (i, lines) = preformat_body(i)?;
+
+        Ok((i, Line::preformatted(alt_text, lines)))
+    }
+
+    fn preformat_header(i: &str) -> IResult<&str, Option<&str>> {
         map(
-            preceded(tag("```"), map(not_line_ending, str_clean_up)),
-            Line::preformat_toggle,
+            delimited(tag("```"), opt(not_line_ending), line_ending),
+            |alt_text| alt_text.map(str::trim),
         )(i)
+    }
+
+    fn preformat_body(i: &str) -> IResult<&str, Vec<Line>> {
+        let (i, lines) = take_until("```")(i)?;
+        let (_, lines) = many0(terminated(text, line_ending))(lines)?;
+
+        let (i, _) = tag("```")(i)?;
+
+        Ok((i, lines))
     }
 
     fn heading(i: &str) -> IResult<&str, Line> {
@@ -223,9 +224,7 @@ mod parser {
 
             let expected = Document::new(vec![
                 Line::text("Hello Text!"),
-                Line::preformat_toggle(Some("python")),
-                Line::preformatted_text("print('hello')"),
-                Line::preformat_toggle(None),
+                Line::preformatted(Some("python"), vec![Line::text("print('hello')")]),
                 Line::text("Hello Text!"),
             ]);
 
@@ -295,20 +294,6 @@ mod parser {
                 ),
                 actual
             );
-        }
-
-        #[test]
-        fn test_preformat_toggle() {
-            let (_, actual) = preformat_toggle("```").unwrap();
-
-            assert_eq!(Line::preformat_toggle(None), actual);
-        }
-
-        #[test]
-        fn test_preformat_toggle_alt_text() {
-            let (_, actual) = preformat_toggle("``` rust").unwrap();
-
-            assert_eq!(Line::preformat_toggle(Some("rust")), actual)
         }
 
         #[test]
