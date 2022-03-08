@@ -11,7 +11,7 @@ pub struct Response {
 
 impl Response {
     pub fn parse(data: &[u8], url: &Url) -> anyhow::Result<Self> {
-        let (header, body) = build_header(data);
+        let (header, body) = build_header(data)?;
 
         Ok(Self {
             header,

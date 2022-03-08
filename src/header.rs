@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use mime::Mime;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -166,12 +167,10 @@ pub enum Inner {
     ClientCertificateRequired { error: Option<String> },
 }
 
-pub fn build_header(input: &[u8]) -> (Header, Option<Vec<u8>>) {
-    let input = std::str::from_utf8(input).unwrap();
-
-    let (body, header) = parser::parse(input).unwrap();
-
-    (header, Some(body.as_bytes().to_vec()))
+pub fn build_header(input: &[u8]) -> anyhow::Result<(Header, Option<Vec<u8>>)> {
+    parser::parse(std::str::from_utf8(input)?)
+        .map(|(body, header)| (header, Some(body.as_bytes().to_vec())))
+        .map_err(|_| anyhow!("failed to parse bytes to utf8 in header"))
 }
 
 mod parser {
@@ -184,6 +183,8 @@ mod parser {
     use nom::combinator::map_res;
     use nom::sequence::{separated_pair, terminated};
     use nom::IResult;
+
+    const SPACE: &str = " ";
 
     #[rustfmt::skip]
     pub fn parse(i: &str) -> IResult<&str, Header> {
@@ -219,7 +220,7 @@ mod parser {
         terminated(
             separated_pair(
                 map_res(status_code_digits, Status::try_from),
-                tag(" "),
+                tag(SPACE),
                 not_line_ending,
             ),
             line_ending,

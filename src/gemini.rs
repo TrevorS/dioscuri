@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +19,7 @@ impl Document {
 pub fn build_document(input: &[u8], url: &Url) -> anyhow::Result<Document> {
     parser::parse(std::str::from_utf8(input)?, url)
         .map(|(_, d)| d)
-        .map_err(|_| anyhow::anyhow!("failed to parse gemini document"))
+        .map_err(|_| anyhow!("failed to parse u8 to utf8 in gemini document"))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -195,17 +196,19 @@ mod parser {
         )
     }
 
-    // TODO: improve this
+    // TODO: improve this (check the rfc)
     fn is_valid_link_char(c: char) -> bool {
         c.is_alphanumeric() || c.is_ascii_punctuation()
     }
 
     // TODO: improve this
     fn str_clean_up(i: &str) -> Option<&str> {
+        let i = i.trim();
+
         if i.is_empty() {
             None
         } else {
-            Some(i.trim())
+            Some(i)
         }
     }
 
