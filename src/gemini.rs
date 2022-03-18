@@ -17,9 +17,13 @@ impl Document {
 }
 
 pub fn build_document(input: &[u8], url: &Url) -> anyhow::Result<Document> {
-    parser::parse(std::str::from_utf8(input)?, url)
+    // clean up extra whitespace but we need to put the final line ending back
+    let mut input = std::str::from_utf8(input)?.trim().to_string();
+    input.push_str("\r\n");
+
+    parser::parse(&input, url)
         .map(|(_, d)| d)
-        .map_err(|_| anyhow!("failed to parse u8 to utf8 in gemini document"))
+        .map_err(|e| anyhow!("failed to parse u8 to utf8 in gemini document: {}", e))
 }
 
 #[derive(Debug, Clone, PartialEq)]

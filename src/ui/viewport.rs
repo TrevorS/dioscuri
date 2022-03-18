@@ -16,30 +16,25 @@ impl Viewport {
                         ui.label(content);
                     }
                     Line::Link { url, link_name } => {
-                        ui.label(format!(
-                            "Link: {} - {}",
-                            link_name.as_ref().unwrap_or(&"".to_string()),
-                            url,
-                        ));
+                        if let Some(link_name) = link_name {
+                            ui.hyperlink_to(link_name, url);
+                        } else {
+                            ui.hyperlink(url);
+                        }
                     }
-                    Line::Heading { content, level } => {
-                        ui.label(format!("#{} {}", level, content));
+                    Line::Heading { content, level: _ } => {
+                        ui.label(egui::RichText::new(content).heading());
                     }
                     Line::Quote { content } => {
-                        ui.label(format!("> {}", content));
+                        ui.label(format!("| {}", content));
                     }
                     Line::UnorderedListItem { content } => {
                         ui.label(format!("* {}", content));
                     }
-                    Line::Preformatted { alt_text, lines } => {
-                        ui.label(format!(
-                            "--- {} ---",
-                            alt_text.as_ref().unwrap_or(&"".to_string())
-                        ));
-
+                    Line::Preformatted { alt_text: _, lines } => {
                         for line in lines {
                             if let Line::Text { content } = line {
-                                ui.label(content);
+                                ui.label(egui::RichText::new(content).monospace());
                             } else {
                                 unreachable!();
                             }
@@ -55,11 +50,34 @@ impl Default for Viewport {
     fn default() -> Self {
         Self {
             document: build_document(
-                "# Header\r\nText\r\n=> gemini://example.org Link\r\n> Quote!\r\n* Item!\r\n"
-                    .as_bytes(),
+                sample_document().as_bytes(),
                 &Url::parse("gemini://example.org").unwrap(),
             )
             .unwrap(),
         }
     }
+}
+
+fn sample_document() -> String {
+    let mut d = [
+        "# Sample Document",
+        "Testing, testing, one two three?",
+        "=> gemini://example.org Example Link",
+        "> To be or not to be!",
+        "## Items",
+        "* Item 1",
+        "* Item 2",
+        "* Item 3",
+        "### Check out some preformatted text:",
+        "``` rust",
+        "pub fn main() {",
+        "   println!(\"Hello world!\");",
+        "}",
+        "```",
+    ]
+    .join("\r\n");
+
+    d.push_str("\r\n");
+
+    d
 }
