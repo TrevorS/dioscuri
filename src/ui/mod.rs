@@ -1,3 +1,4 @@
+mod highlighter;
 mod toolbar;
 mod viewport;
 

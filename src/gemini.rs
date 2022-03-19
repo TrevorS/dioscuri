@@ -94,6 +94,20 @@ impl Line {
             content: content.to_string(),
         }
     }
+
+    pub fn is_text(&self) -> bool {
+        matches!(self, Self::Text { content: _ })
+    }
+
+    pub fn get_content(&self) -> Option<&str> {
+        match self {
+            Self::Text { content }
+            | Self::Heading { content, level: _ }
+            | Self::UnorderedListItem { content }
+            | Self::Quote { content } => Some(content),
+            _ => None,
+        }
+    }
 }
 
 mod parser {
