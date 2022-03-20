@@ -25,6 +25,7 @@ impl SyntaxHighlighter {
             .find_syntax_by_token(alt_text)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
+        // TODO: think about how we want to handle theme selection
         let theme = &self.theme_set.themes["base16-ocean.dark"];
 
         let mut hl = HighlightLines::new(syntax, theme);

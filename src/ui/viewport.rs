@@ -17,6 +17,12 @@ impl Viewport {
         }
     }
 
+    pub fn set_document(mut self, document: Document) -> Self {
+        self.document = document;
+
+        self
+    }
+
     pub fn ui(&self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().show(ui, |ui| {
             for line in self.document.lines() {

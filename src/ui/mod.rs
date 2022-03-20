@@ -13,13 +13,19 @@ pub struct DioscuriApp {
     viewport: Viewport,
 }
 
-impl Default for DioscuriApp {
-    fn default() -> Self {
+impl DioscuriApp {
+    pub fn new(url: &str) -> Self {
         Self {
-            url: "gemini://example.org".to_string(),
-            toolbar: Default::default(),
+            url: url.to_string(),
+            toolbar: Toolbar::new(url),
             viewport: Default::default(),
         }
+    }
+}
+
+impl Default for DioscuriApp {
+    fn default() -> Self {
+        Self::new("gemini://example.org")
     }
 }
 
