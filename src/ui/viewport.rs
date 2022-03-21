@@ -1,4 +1,5 @@
 use eframe::egui;
+use egui::RichText;
 use url::Url;
 
 use crate::gemini::{build_document, Document, Line};
@@ -49,16 +50,10 @@ impl Viewport {
                     Line::Preformatted { alt_text, lines } => {
                         let content = extract_content_from_preformatted_line(lines);
 
-                        match alt_text {
-                            Some(alt_text) => {
-                                let job = self.highlighter.highlight(alt_text, &content);
-                                ui.label(job);
-                            }
-                            None => {
-                                let text = egui::RichText::new(content).monospace();
-
-                                ui.label(text);
-                            }
+                        if let Some(alt_text) = alt_text {
+                            ui.label(self.highlighter.highlight(alt_text, &content));
+                        } else {
+                            ui.label(RichText::new(content).monospace());
                         }
                     }
                 }

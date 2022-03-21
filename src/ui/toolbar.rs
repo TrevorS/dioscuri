@@ -31,6 +31,10 @@ impl Toolbar {
                 dbg!("refresh button pressed");
             }
 
+            if ui.button("X").clicked() {
+                dbg!("stop button pressed");
+            }
+
             let response = ui.text_edit_singleline(&mut self.url);
 
             if response.lost_focus() && ui.input().key_pressed(Key::Enter) {
