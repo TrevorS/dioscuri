@@ -19,3 +19,4 @@ sha2 = "0.10.2"
 base16ct = { version = "0.1.1", features = ["alloc"] }
 eframe = "0.17.0"
 syntect = "4.6.0"
+crossbeam = "0.8.1"

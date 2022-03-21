@@ -1,5 +1,6 @@
 mod client;
 mod db;
+mod event;
 mod gemini;
 mod header;
 mod response;
