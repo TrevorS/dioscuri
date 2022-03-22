@@ -4,11 +4,13 @@ mod viewport;
 
 use eframe::{egui, epi};
 
+use crate::event::EventManager;
 use crate::ui::toolbar::Toolbar;
 use crate::ui::viewport::Viewport;
 
 pub struct DioscuriApp {
     url: String,
+    event_manager: EventManager,
     toolbar: Toolbar,
     viewport: Viewport,
 }
@@ -17,6 +19,7 @@ impl DioscuriApp {
     pub fn new(url: &str) -> Self {
         Self {
             url: url.to_string(),
+            event_manager: Default::default(),
             toolbar: Toolbar::new(url),
             viewport: Default::default(),
         }
