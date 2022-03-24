@@ -3,6 +3,7 @@ mod toolbar;
 mod viewport;
 
 use eframe::{egui, epi};
+use url::Url;
 
 use crate::event::{Event, EventManager};
 use crate::settings::Settings;
@@ -10,7 +11,7 @@ use crate::ui::toolbar::Toolbar;
 use crate::ui::viewport::Viewport;
 
 pub struct DioscuriApp {
-    url: String,
+    url: Option<Url>,
     event_manager: EventManager,
     toolbar: Toolbar,
     settings: Settings,
@@ -19,7 +20,7 @@ pub struct DioscuriApp {
 
 impl DioscuriApp {
     pub fn new(settings: Settings, event_manager: EventManager) -> Self {
-        let url = "gemini://example.org".to_string();
+        let url = settings.default_url();
         let toolbar = Toolbar::new(event_manager.get_tx_rx());
 
         Self {
@@ -30,14 +31,8 @@ impl DioscuriApp {
             viewport: Default::default(),
         }
     }
-}
 
-impl epi::App for DioscuriApp {
-    fn name(&self) -> &str {
-        "Dioscuri"
-    }
-
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    fn process_events(&self) -> anyhow::Result<()> {
         self.event_manager
             .get_rx()
             .try_iter()
@@ -49,6 +44,7 @@ impl epi::App for DioscuriApp {
                     dbg!("forward event processed");
                 }
                 Event::Load(url) => {
+                    let url: Url = url.parse().unwrap();
                     dbg!("load event processed: {}", &url);
                 }
                 Event::Quit => {
@@ -62,6 +58,18 @@ impl epi::App for DioscuriApp {
                     dbg!("stop event processed");
                 }
             });
+
+        Ok(())
+    }
+}
+
+impl epi::App for DioscuriApp {
+    fn name(&self) -> &str {
+        "Dioscuri"
+    }
+
+    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+        self.process_events().unwrap();
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             self.toolbar.ui(ui);
