@@ -1,41 +1,51 @@
 use eframe::egui;
 use egui::RichText;
-use url::Url;
 
-use crate::gemini::{build_document, Document, Line};
+use crate::event::{Event, Transceiver};
+use crate::gemini::{Document, Line};
 use crate::ui::highlighter::SyntaxHighlighter;
 
 pub struct Viewport {
-    document: Document,
+    document: Option<Document>,
     highlighter: SyntaxHighlighter,
+    transceiver: Transceiver,
 }
 
 impl Viewport {
-    pub fn new(document: Document, highlighter: SyntaxHighlighter) -> Self {
+    pub fn new(highlighter: SyntaxHighlighter, transceiver: Transceiver) -> Self {
         Self {
-            document,
+            document: None,
             highlighter,
+            transceiver,
         }
     }
 
-    pub fn set_document(mut self, document: Document) -> Self {
-        self.document = document;
-
-        self
+    pub fn set_document(&mut self, document: Document) {
+        self.document = Some(document);
     }
 
     pub fn ui(&self, ui: &mut egui::Ui) {
+        if self.document.is_none() {
+            return;
+        }
+
+        let lines = self.document.as_ref().unwrap().lines();
+
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in self.document.lines() {
+            for line in lines {
                 match line {
                     Line::Text { content } => {
                         ui.label(content);
                     }
                     Line::Link { url, link_name } => {
-                        if let Some(link_name) = link_name {
-                            ui.hyperlink_to(link_name, url);
+                        let response = if let Some(link_name) = link_name {
+                            ui.hyperlink_to(link_name, url)
                         } else {
-                            ui.hyperlink(url);
+                            ui.hyperlink(url)
+                        };
+
+                        if response.clicked() {
+                            self.transceiver.send(Event::Load(url.to_string())).unwrap();
                         }
                     }
                     Line::Heading { content, level: _ } => {
@@ -68,41 +78,4 @@ fn extract_content_from_preformatted_line(lines: &[Line]) -> String {
         .filter_map(Line::get_content)
         .collect::<Vec<&str>>()
         .join("\n")
-}
-
-impl Default for Viewport {
-    fn default() -> Self {
-        Self::new(
-            build_document(
-                sample_document().as_bytes(),
-                &Url::parse("gemini://example.org").unwrap(),
-            )
-            .unwrap(),
-            Default::default(),
-        )
-    }
-}
-
-fn sample_document() -> String {
-    let mut d = [
-        "# Sample Document",
-        "Testing, testing, one two three?",
-        "=> gemini://example.org Example Link",
-        "> To be or not to be!",
-        "## Items",
-        "* Item 1",
-        "* Item 2",
-        "* Item 3",
-        "### Check out some preformatted text:",
-        "``` rust",
-        "pub fn main() {",
-        "   println!(\"Hello world!\");",
-        "}",
-        "```",
-    ]
-    .join("\r\n");
-
-    d.push_str("\r\n");
-
-    d
 }

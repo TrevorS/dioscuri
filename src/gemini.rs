@@ -95,10 +95,6 @@ impl Line {
         }
     }
 
-    pub fn is_text(&self) -> bool {
-        matches!(self, Self::Text { content: _ })
-    }
-
     pub fn get_content(&self) -> Option<&str> {
         match self {
             Self::Text { content }

@@ -13,28 +13,43 @@ pub enum Event {
     Refresh,
 }
 
-pub struct EventManager {
+#[derive(Debug, Clone)]
+pub struct Transceiver {
     tx: EventSender,
     rx: EventReceiver,
+}
+
+impl Transceiver {
+    pub fn new(tx: EventSender, rx: EventReceiver) -> Self {
+        Self { tx, rx }
+    }
+
+    pub fn send(&self, event: Event) -> anyhow::Result<()> {
+        self.tx
+            .send(event)
+            .map_err(|e| anyhow::anyhow!("failed to send event: {}", e))
+    }
+
+    pub fn receive(&self) -> crossbeam::channel::TryIter<'_, Event> {
+        self.rx.try_iter()
+    }
+}
+
+pub struct EventManager {
+    transceiver: Transceiver,
 }
 
 impl EventManager {
     pub fn new() -> Self {
         let (tx, rx) = unbounded();
 
-        Self { tx, rx }
+        Self {
+            transceiver: Transceiver::new(tx, rx),
+        }
     }
 
-    pub fn get_tx(&self) -> Sender<Event> {
-        self.tx.clone()
-    }
-
-    pub fn get_rx(&self) -> Receiver<Event> {
-        self.rx.clone()
-    }
-
-    pub fn get_tx_rx(&self) -> (EventSender, EventReceiver) {
-        (self.get_tx(), self.get_rx())
+    pub fn connect(&self) -> Transceiver {
+        self.transceiver.clone()
     }
 }
 
