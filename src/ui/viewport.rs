@@ -1,22 +1,27 @@
 use eframe::egui;
 use egui::RichText;
 
-use crate::event::{Event, Transceiver};
+use crate::event::{Event, EventBus, EventReceiver};
 use crate::gemini::{Document, Line};
 use crate::ui::highlighter::SyntaxHighlighter;
 
-pub struct Viewport {
+#[derive(Debug)]
+pub struct Viewport<'a> {
     document: Option<Document>,
     highlighter: SyntaxHighlighter,
-    transceiver: Transceiver,
+    event_bus: &'a EventBus,
+    event_receiver: EventReceiver,
 }
 
-impl Viewport {
-    pub fn new(highlighter: SyntaxHighlighter, transceiver: Transceiver) -> Self {
+impl<'a> Viewport<'a> {
+    pub fn new(highlighter: SyntaxHighlighter, event_bus: &'a mut EventBus) -> Self {
+        let event_receiver = event_bus.subscribe();
+
         Self {
             document: None,
             highlighter,
-            transceiver,
+            event_bus,
+            event_receiver,
         }
     }
 
@@ -45,7 +50,9 @@ impl Viewport {
                         };
 
                         if response.clicked() {
-                            self.transceiver.send(Event::Load(url.to_string())).unwrap();
+                            self.event_bus
+                                .broadcast(Event::Load(url.to_string()))
+                                .unwrap();
                         }
                     }
                     Line::Heading { content, level: _ } => {

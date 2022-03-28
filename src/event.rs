@@ -14,47 +14,28 @@ pub enum Event {
 }
 
 #[derive(Debug, Clone)]
-pub struct Transceiver {
-    tx: EventSender,
-    rx: EventReceiver,
+pub struct EventBus {
+    channels: Vec<EventSender>,
 }
 
-impl Transceiver {
-    pub fn new(tx: EventSender, rx: EventReceiver) -> Self {
-        Self { tx, rx }
-    }
-
-    pub fn send(&self, event: Event) -> anyhow::Result<()> {
-        self.tx
-            .send(event)
-            .map_err(|e| anyhow::anyhow!("failed to send event: {}", e))
-    }
-
-    pub fn receive(&self) -> crossbeam::channel::TryIter<'_, Event> {
-        self.rx.try_iter()
-    }
-}
-
-pub struct EventManager {
-    transceiver: Transceiver,
-}
-
-impl EventManager {
+impl EventBus {
     pub fn new() -> Self {
+        Self { channels: vec![] }
+    }
+
+    pub fn subscribe(&mut self) -> EventReceiver {
         let (tx, rx) = unbounded();
 
-        Self {
-            transceiver: Transceiver::new(tx, rx),
+        self.channels.push(tx);
+
+        rx
+    }
+
+    pub fn broadcast(&self, event: Event) -> anyhow::Result<()> {
+        for channel in &self.channels {
+            channel.send(event.clone())?;
         }
-    }
 
-    pub fn connect(&self) -> Transceiver {
-        self.transceiver.clone()
-    }
-}
-
-impl Default for EventManager {
-    fn default() -> Self {
-        Self::new()
+        Ok(())
     }
 }

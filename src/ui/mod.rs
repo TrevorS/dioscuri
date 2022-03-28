@@ -6,7 +6,7 @@ use eframe::{egui, epi};
 use url::Url;
 
 use crate::client::GeminiClient;
-use crate::event::{Event, EventManager, Transceiver};
+use crate::event::{Event, EventBus, EventReceiver};
 use crate::gemini::build_document;
 use crate::settings::Settings;
 use crate::ui::toolbar::Toolbar;
@@ -14,42 +14,39 @@ use crate::ui::viewport::Viewport;
 
 use self::highlighter::SyntaxHighlighter;
 
-pub struct DioscuriApp {
+#[derive(Debug)]
+pub struct DioscuriApp<'a> {
     url: Option<Url>,
     gemini_client: GeminiClient,
-    event_manager: EventManager,
-    transceiver: Transceiver,
+    event_bus: EventBus,
+    event_receiver: EventReceiver,
     settings: Settings,
-    toolbar: Toolbar,
-    viewport: Viewport,
+    toolbar: Toolbar<'a>,
+    viewport: Viewport<'a>,
     session_history: Vec<String>,
 }
 
-impl DioscuriApp {
-    pub fn new(
-        settings: Settings,
-        event_manager: EventManager,
-        gemini_client: GeminiClient,
-    ) -> Self {
+impl DioscuriApp<'_> {
+    pub fn new(settings: Settings, mut event_bus: EventBus, gemini_client: GeminiClient) -> Self {
         let url = settings.default_url();
 
-        let transceiver = event_manager.connect();
-        let toolbar = Toolbar::new(transceiver.clone());
+        let event_receiver = event_bus.subscribe();
+        let toolbar = Toolbar::new(&self, event_receiver);
 
         let highlighter = SyntaxHighlighter::default();
-        let viewport = Viewport::new(highlighter, transceiver.clone());
+        let viewport = Viewport::new(highlighter, &mut event_bus);
 
-        transceiver
-            .send(Event::Load(settings.default_url().unwrap().to_string()))
+        event_bus
+            .broadcast(Event::Load(settings.default_url().unwrap().to_string()))
             .unwrap();
 
         let session_history = vec![];
 
         Self {
             url,
-            event_manager,
             gemini_client,
-            transceiver,
+            event_bus,
+            event_receiver,
             settings,
             toolbar,
             viewport,
@@ -58,11 +55,11 @@ impl DioscuriApp {
     }
 
     fn process_events(&mut self) -> anyhow::Result<()> {
-        for event in self.transceiver.receive() {
+        for event in self.event_receiver.try_iter() {
             match event {
                 Event::Back => {
                     if let Some(url) = self.session_history.pop() {
-                        self.transceiver.send(Event::Load(url)).unwrap();
+                        self.event_bus.broadcast(Event::Load(url)).unwrap();
                     };
 
                     dbg!("back event processed");
@@ -101,7 +98,7 @@ impl DioscuriApp {
     }
 }
 
-impl epi::App for DioscuriApp {
+impl epi::App for DioscuriApp<'_> {
     fn name(&self) -> &str {
         "Dioscuri"
     }

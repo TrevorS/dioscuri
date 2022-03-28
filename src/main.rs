@@ -14,7 +14,7 @@ use client::GeminiClient;
 use db::Db;
 use tls::verification::TofuVerifier;
 
-use crate::event::EventManager;
+use crate::event::EventBus;
 use crate::settings::Settings;
 use crate::ui::DioscuriApp;
 
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
     let tofu_verifier = Rc::new(TofuVerifier::new(db));
     let gemini_client = GeminiClient::new(tofu_verifier)?;
 
-    let event_manager = EventManager::new();
-    let app = Box::new(DioscuriApp::new(settings, event_manager, gemini_client));
+    let event_bus = EventBus::new();
+    let app = Box::new(DioscuriApp::new(settings, event_bus, gemini_client));
     eframe::run_native(app, Default::default());
 }

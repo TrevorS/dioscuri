@@ -12,6 +12,12 @@ pub struct GeminiClient {
     verifier: Rc<dyn Verifier>,
 }
 
+impl std::fmt::Debug for GeminiClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("GeminiClient")
+    }
+}
+
 impl GeminiClient {
     pub fn new(verifier: Rc<dyn Verifier>) -> anyhow::Result<Self> {
         Ok(Self {
