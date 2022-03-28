@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use log::info;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +18,8 @@ impl Document {
 }
 
 pub fn build_document(input: &[u8], url: &Url) -> anyhow::Result<Document> {
+    info!("building document for: {}", url.to_string());
+
     // clean up extra whitespace but we need to put the final line ending back
     let mut input = std::str::from_utf8(input)?.trim().to_string();
     input.push_str("\r\n");

@@ -20,3 +20,5 @@ base16ct = { version = "0.1.1", features = ["alloc"] }
 eframe = "0.17.0"
 syntect = "4.6.0"
 crossbeam = "0.8.1"
+log = "0.4.16"
+pretty_env_logger = "0.4.0"

@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use log::info;
 use rusqlite::OptionalExtension;
 
 use crate::db::model::Certificate;
@@ -17,6 +18,8 @@ impl Db {
 
 impl Db {
     pub fn prepare(&self) -> anyhow::Result<()> {
+        info!("preparing database");
+
         self.connection
             .execute(
                 r#"
@@ -36,6 +39,8 @@ impl Db {
     }
 
     pub fn get_certificate(&self, hostname: &str) -> anyhow::Result<Option<model::Certificate>> {
+        info!("getting certificate for: {}", hostname);
+
         self.connection
             .prepare(
                 r#"
@@ -61,6 +66,8 @@ impl Db {
         hostname: &str,
         fingerprint: &str,
     ) -> anyhow::Result<Certificate> {
+        info!("inserting certificate for {}", hostname);
+
         let now = time::OffsetDateTime::now_utc();
 
         let count = self
@@ -100,6 +107,8 @@ impl Db {
     }
 
     pub fn update_certificate_timestamp(&self, hostname: &str) -> anyhow::Result<()> {
+        info!("updating timestamp for {}", hostname);
+
         let now = time::OffsetDateTime::now_utc();
 
         self.connection

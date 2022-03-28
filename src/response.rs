@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use url::Url;
 
 use crate::header::{build_header, Header};

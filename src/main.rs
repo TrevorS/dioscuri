@@ -10,15 +10,20 @@ mod ui;
 
 use std::rc::Rc;
 
+use log::info;
+
 use client::GeminiClient;
 use db::Db;
+use event::EventBus;
+use settings::Settings;
 use tls::verification::TofuVerifier;
-
-use crate::event::EventBus;
-use crate::settings::Settings;
-use crate::ui::DioscuriApp;
+use ui::DioscuriApp;
 
 fn main() -> anyhow::Result<()> {
+    pretty_env_logger::init();
+
+    info!("Logging initialized");
+
     let settings = Settings::new();
 
     let db = Db::new(&settings.database_path())?;

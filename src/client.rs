@@ -1,6 +1,8 @@
+use std::fmt;
 use std::rc::Rc;
 use std::{io::Read, io::Write};
 
+use log::info;
 use url::Url;
 
 use crate::response::Response;
@@ -12,8 +14,8 @@ pub struct GeminiClient {
     verifier: Rc<dyn Verifier>,
 }
 
-impl std::fmt::Debug for GeminiClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for GeminiClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("GeminiClient")
     }
 }
@@ -27,13 +29,16 @@ impl GeminiClient {
     }
 
     pub fn get(&self, url: &Url) -> anyhow::Result<Response> {
+        info!("getting url: {}", url.to_string());
+
         let mut stream = get_stream(&self.connector, url)?;
 
         let certificate = stream.peer_certificate()?;
 
         let certificate_status = self.verifier.verify(certificate.as_ref(), url)?;
-        dbg!(&certificate_status);
+        info!("TOFU certificate status: {}", certificate_status);
 
+        // TODO: need to make it possible for a user to respond to this event in the UI
         anyhow::ensure!(
             State::Conflict != certificate_status,
             "certificate conflict"

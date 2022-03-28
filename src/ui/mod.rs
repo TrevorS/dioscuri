@@ -3,41 +3,43 @@ mod toolbar;
 mod viewport;
 
 use eframe::{egui, epi};
+use log::{debug, info};
 use url::Url;
 
 use crate::client::GeminiClient;
-use crate::event::{Event, EventBus, EventReceiver};
+use crate::event::{Event, EventBroadcaster, EventBus, EventReceiver};
 use crate::gemini::build_document;
 use crate::settings::Settings;
 use crate::ui::toolbar::Toolbar;
 use crate::ui::viewport::Viewport;
 
-use self::highlighter::SyntaxHighlighter;
-
 #[derive(Debug)]
-pub struct DioscuriApp<'a> {
+pub struct DioscuriApp {
     url: Option<Url>,
     gemini_client: GeminiClient,
     event_bus: EventBus,
+    event_broadcaster: EventBroadcaster,
     event_receiver: EventReceiver,
     settings: Settings,
-    toolbar: Toolbar<'a>,
-    viewport: Viewport<'a>,
+    toolbar: Toolbar,
+    viewport: Viewport,
     session_history: Vec<String>,
 }
 
-impl DioscuriApp<'_> {
+impl DioscuriApp {
     pub fn new(settings: Settings, mut event_bus: EventBus, gemini_client: GeminiClient) -> Self {
         let url = settings.default_url();
 
-        let event_receiver = event_bus.subscribe();
-        let toolbar = Toolbar::new(&self, event_receiver);
+        let (broadcaster, receiver) = event_bus.subscribe();
+        let toolbar = Toolbar::new(broadcaster, receiver);
 
-        let highlighter = SyntaxHighlighter::default();
-        let viewport = Viewport::new(highlighter, &mut event_bus);
+        let broadcaster = event_bus.broadcaster();
+        let viewport = Viewport::new(Default::default(), broadcaster);
 
-        event_bus
-            .broadcast(Event::Load(settings.default_url().unwrap().to_string()))
+        let (event_broadcaster, event_receiver) = event_bus.subscribe();
+
+        event_broadcaster
+            .send(Event::Load(settings.default_url_as_string()))
             .unwrap();
 
         let session_history = vec![];
@@ -46,6 +48,7 @@ impl DioscuriApp<'_> {
             url,
             gemini_client,
             event_bus,
+            event_broadcaster,
             event_receiver,
             settings,
             toolbar,
@@ -55,41 +58,55 @@ impl DioscuriApp<'_> {
     }
 
     fn process_events(&mut self) -> anyhow::Result<()> {
+        debug!("processing events");
+        self.event_bus.relay()?;
+
+        // TODO: extract arm logic into functions
         for event in self.event_receiver.try_iter() {
             match event {
                 Event::Back => {
-                    if let Some(url) = self.session_history.pop() {
-                        self.event_bus.broadcast(Event::Load(url)).unwrap();
-                    };
+                    info!("processing back event");
+                    info!("session history: {:#?}", &self.session_history);
 
-                    dbg!("back event processed");
+                    if let Some(url) = self.session_history.pop() {
+                        info!("generating load event: {}", &url);
+
+                        self.event_broadcaster.send(Event::Load(url)).unwrap();
+                    };
                 }
                 Event::Forward => {
-                    dbg!("forward event processed");
+                    info!("processing forward event");
                 }
                 Event::Load(url) => {
+                    info!("processing load event for url: {}", url);
+
                     let url: Url = url.parse().unwrap();
                     self.url = Some(url.clone());
 
                     let result = self.gemini_client.get(&url).unwrap();
-
                     let document = build_document(result.body().unwrap(), &url).unwrap();
                     self.viewport.set_document(document);
 
                     self.toolbar.set_url(url.as_str());
                     self.session_history.push(url.to_string());
+                }
+                Event::Home => {
+                    info!("processing home event");
 
-                    dbg!("load event processed");
+                    self.event_broadcaster
+                        .send(Event::Load(self.settings.default_url_as_string()))
+                        .unwrap();
                 }
                 Event::Quit => {
-                    dbg!("quit event processed");
+                    info!("processing quit event");
+
                     std::process::exit(0);
                 }
                 Event::Refresh => {
-                    dbg!("refresh event processed");
+                    info!("processing refresh event");
                 }
                 Event::Stop => {
-                    dbg!("stop event processed");
+                    info!("processing stop event");
                 }
             }
         }
@@ -98,13 +115,14 @@ impl DioscuriApp<'_> {
     }
 }
 
-impl epi::App for DioscuriApp<'_> {
+impl epi::App for DioscuriApp {
     fn name(&self) -> &str {
         "Dioscuri"
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
-        self.process_events().unwrap();
+        self.process_events()
+            .expect("failed to process events from event_bus");
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             self.toolbar.ui(ui);

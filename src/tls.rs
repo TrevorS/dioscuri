@@ -39,6 +39,8 @@ fn url_to_socket_addrs(url: &Url) -> anyhow::Result<(&str, SocketAddr)> {
 }
 
 pub mod verification {
+    use std::fmt;
+
     use anyhow::anyhow;
     use native_tls::Certificate;
     use sha2::Digest;
@@ -51,6 +53,12 @@ pub mod verification {
         New,
         Matched,
         Conflict,
+    }
+
+    impl fmt::Display for State {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{:?}", self)
+        }
     }
 
     pub trait Verifier {

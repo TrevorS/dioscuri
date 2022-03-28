@@ -99,6 +99,7 @@ pub struct Header {
     inner: Inner,
 }
 
+#[allow(dead_code)]
 impl Header {
     pub fn status(&self) -> Status {
         self.status
