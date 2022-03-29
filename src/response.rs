@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use log::info;
 use url::Url;
 
 use crate::header::{build_header, Header};
@@ -13,6 +14,8 @@ pub struct Response {
 impl Response {
     pub fn parse(data: &[u8], url: &Url) -> anyhow::Result<Self> {
         let (header, body) = build_header(data)?;
+
+        info!("parsed header: {}", &header);
 
         Ok(Self {
             header,

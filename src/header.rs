@@ -1,3 +1,5 @@
+use core::fmt;
+
 use anyhow::anyhow;
 use mime::Mime;
 
@@ -93,10 +95,22 @@ impl From<u8> for Status {
     }
 }
 
+impl fmt::Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#?}", self)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Header {
     status: Status,
     inner: Inner,
+}
+
+impl fmt::Display for Header {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Header status: {}, inner: {}", self.status, self.inner)
+    }
 }
 
 #[allow(dead_code)]
@@ -166,6 +180,12 @@ pub enum Inner {
     Redirect { url: url::Url },
     Failure { error: Option<String> },
     ClientCertificateRequired { error: Option<String> },
+}
+
+impl fmt::Display for Inner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#?}", self)
+    }
 }
 
 pub fn build_header(input: &[u8]) -> anyhow::Result<(Header, Option<Vec<u8>>)> {
