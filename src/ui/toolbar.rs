@@ -23,7 +23,7 @@ impl Toolbar {
         self.url = url.to_string();
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, back_enabled: bool, forward_enabled: bool) {
         for event in self.event_receiver.try_iter() {
             if let Event::Load {
                 url,
@@ -39,11 +39,17 @@ impl Toolbar {
                 self.event_broadcaster.send(Event::quit()).unwrap();
             }
 
-            if ui.button("<-").clicked() {
+            if ui
+                .add_enabled(back_enabled, egui::Button::new("<-"))
+                .clicked()
+            {
                 self.event_broadcaster.send(Event::back()).unwrap();
             }
 
-            if ui.button("->").clicked() {
+            if ui
+                .add_enabled(forward_enabled, egui::Button::new("->"))
+                .clicked()
+            {
                 self.event_broadcaster.send(Event::forward()).unwrap();
             }
 

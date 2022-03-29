@@ -152,7 +152,11 @@ impl epi::App for DioscuriApp {
             .expect("failed to process events from event_bus");
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            self.toolbar.ui(ui);
+            self.toolbar.ui(
+                ui,
+                self.session_history.can_go_backward(),
+                self.session_history.can_go_forward(),
+            );
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
