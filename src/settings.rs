@@ -20,7 +20,8 @@ impl Settings {
 
     pub fn default_url_as_string(&self) -> String {
         self.default_url()
-            .map_or_else(|| "".to_string(), |url| url.to_string())
+            .expect("no default url defined")
+            .to_string()
     }
 
     pub fn database_path(&self) -> String {

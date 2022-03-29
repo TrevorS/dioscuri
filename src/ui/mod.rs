@@ -1,4 +1,5 @@
 mod highlighter;
+mod session;
 mod toolbar;
 mod viewport;
 
@@ -10,6 +11,7 @@ use crate::client::GeminiClient;
 use crate::event::{Event, EventBroadcaster, EventBus, EventReceiver};
 use crate::gemini::build_document;
 use crate::settings::Settings;
+use crate::ui::session::SessionHistory;
 use crate::ui::toolbar::Toolbar;
 use crate::ui::viewport::Viewport;
 
@@ -23,7 +25,7 @@ pub struct DioscuriApp {
     settings: Settings,
     toolbar: Toolbar,
     viewport: Viewport,
-    session_history: Vec<String>,
+    session_history: SessionHistory,
 }
 
 impl DioscuriApp {
@@ -39,10 +41,10 @@ impl DioscuriApp {
         let (event_broadcaster, event_receiver) = event_bus.subscribe();
 
         event_broadcaster
-            .send(Event::Load(settings.default_url_as_string()))
+            .send(Event::load(&settings.default_url_as_string()))
             .unwrap();
 
-        let session_history = vec![];
+        let session_history = SessionHistory::new();
 
         Self {
             url,
@@ -68,16 +70,30 @@ impl DioscuriApp {
                     info!("processing back event");
                     info!("session history: {:#?}", &self.session_history);
 
-                    if let Some(url) = self.session_history.pop() {
-                        info!("generating load event: {}", &url);
+                    if let Some(page) = self.session_history.go_back() {
+                        info!("back - generating load event: {}", &page);
 
-                        self.event_broadcaster.send(Event::Load(url)).unwrap();
+                        self.event_broadcaster
+                            .send(Event::load_dont_track(page.url()))
+                            .unwrap();
                     };
                 }
                 Event::Forward => {
                     info!("processing forward event");
+                    info!("session history: {:#?}", &self.session_history);
+
+                    if let Some(page) = self.session_history.go_forward() {
+                        info!("forward - generating load event: {}", &page);
+
+                        self.event_broadcaster
+                            .send(Event::load_dont_track(page.url()))
+                            .unwrap();
+                    };
                 }
-                Event::Load(url) => {
+                Event::Load {
+                    url,
+                    add_to_session,
+                } => {
                     info!("processing load event for url: {}", url);
 
                     let url: Url = url.parse().unwrap();
@@ -85,16 +101,19 @@ impl DioscuriApp {
 
                     let result = self.gemini_client.get(&url).unwrap();
                     let document = build_document(result.body().unwrap(), &url).unwrap();
-                    self.viewport.set_document(document);
 
+                    self.viewport.set_document(document);
                     self.toolbar.set_url(url.as_str());
-                    self.session_history.push(url.to_string());
+
+                    if add_to_session {
+                        self.session_history.navigate(url.as_str());
+                    }
                 }
                 Event::Home => {
                     info!("processing home event");
 
                     self.event_broadcaster
-                        .send(Event::Load(self.settings.default_url_as_string()))
+                        .send(Event::load(&self.settings.default_url_as_string()))
                         .unwrap();
                 }
                 Event::Quit => {
@@ -104,6 +123,14 @@ impl DioscuriApp {
                 }
                 Event::Refresh => {
                     info!("processing refresh event");
+
+                    if self.url.is_some() {
+                        let url = self.url.as_ref().unwrap();
+
+                        self.event_broadcaster
+                            .send(Event::load_dont_track(url.as_str()))
+                            .unwrap();
+                    }
                 }
                 Event::Stop => {
                     info!("processing stop event");

@@ -10,11 +10,51 @@ pub type EventRelay = Receiver<Event>;
 pub enum Event {
     Back,
     Forward,
-    Load(String),
+    Load { url: String, add_to_session: bool },
     Home,
     Quit,
     Stop,
     Refresh,
+}
+
+impl Event {
+    pub fn back() -> Self {
+        Self::Back
+    }
+
+    pub fn forward() -> Self {
+        Self::Forward
+    }
+
+    pub fn load(url: &str) -> Self {
+        Self::Load {
+            url: url.to_string(),
+            add_to_session: true,
+        }
+    }
+
+    pub fn load_dont_track(url: &str) -> Self {
+        Self::Load {
+            url: url.to_string(),
+            add_to_session: false,
+        }
+    }
+
+    pub fn home() -> Self {
+        Self::Home
+    }
+
+    pub fn quit() -> Self {
+        Self::Quit
+    }
+
+    pub fn stop() -> Self {
+        Self::Stop
+    }
+
+    pub fn refresh() -> Self {
+        Self::Refresh
+    }
 }
 
 #[derive(Debug, Clone)]

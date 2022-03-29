@@ -25,42 +25,44 @@ impl Toolbar {
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         for event in self.event_receiver.try_iter() {
-            if let Event::Load(url) = event {
+            if let Event::Load {
+                url,
+                add_to_session: _,
+            } = event
+            {
                 self.url = url;
             }
         }
 
         ui.horizontal(|ui| {
             if ui.button("Q").clicked() {
-                self.event_broadcaster.send(Event::Quit).unwrap();
+                self.event_broadcaster.send(Event::quit()).unwrap();
             }
 
             if ui.button("<-").clicked() {
-                self.event_broadcaster.send(Event::Back).unwrap();
+                self.event_broadcaster.send(Event::back()).unwrap();
             }
 
             if ui.button("->").clicked() {
-                self.event_broadcaster.send(Event::Forward).unwrap();
+                self.event_broadcaster.send(Event::forward()).unwrap();
             }
 
             if ui.button("R").clicked() {
-                self.event_broadcaster.send(Event::Refresh).unwrap();
+                self.event_broadcaster.send(Event::refresh()).unwrap();
             }
 
             if ui.button("H").clicked() {
-                self.event_broadcaster.send(Event::Home).unwrap();
+                self.event_broadcaster.send(Event::home()).unwrap();
             }
 
             if ui.button("X").clicked() {
-                self.event_broadcaster.send(Event::Stop).unwrap();
+                self.event_broadcaster.send(Event::stop()).unwrap();
             }
 
             let response = ui.text_edit_singleline(&mut self.url);
 
             if response.lost_focus() && ui.input().key_pressed(Key::Enter) {
-                self.event_broadcaster
-                    .send(Event::Load(self.url.to_string()))
-                    .unwrap();
+                self.event_broadcaster.send(Event::load(&self.url)).unwrap();
             }
         });
     }

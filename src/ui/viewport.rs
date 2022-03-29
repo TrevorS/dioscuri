@@ -47,7 +47,7 @@ impl Viewport {
 
                         if response.clicked() {
                             self.event_broadcaster
-                                .send(Event::Load(url.to_string()))
+                                .send(Event::load(url.as_str()))
                                 .unwrap();
                         }
                     }
